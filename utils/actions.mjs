@@ -31,6 +31,18 @@ async function getCartProducts(cart) {
     return { productMap, total };
 }
 
+// Check a product image URL is actually fetchable before asking
+// Telegram to download it (avoids 90s hangs / crashes on dead links)
+async function isImageReachable(url) {
+  if (!url) return false;
+  try {
+    const res = await fetch(url, { method: 'HEAD', signal: AbortSignal.timeout(5000) });
+    return res.ok;
+  } catch {
+    return false;
+  }
+}
+
 export function registerActions(bot) {
     bot.action('signup', async (ctx) => {
         ctx.answerCbQuery();
@@ -251,21 +263,36 @@ export function registerActions(bot) {
         const category = await Category.findById(product.category);
         const backButton = category ? Markup.button.callback(await translateText('◀️ Back', lang), `cat_${category.slug}`) : Markup.button.callback(await translateText('◀️ Back', lang), 'menu_catalogue');
 
-        try {
-            await ctx.replyWithPhoto(
-                { url: product.image || 'https://giftcards.africa/wp-content/uploads/2023/07/fbef9b57-e0b0-4ead-aee3-fdc2bc80e2db.png' },
-                {
-                    caption: `${product.name}
+        const fallbackImage = 'https://giftcards.africa/wp-content/uploads/2023/07/fbef9b57-e0b0-4ead-aee3-fdc2bc80e2db.png';
+        const imageUrl = product.image || fallbackImage;
+        const canSendPhoto = await isImageReachable(imageUrl);
+
+        if (canSendPhoto) {
+            try {
+                await ctx.replyWithPhoto(
+                    { url: imageUrl },
+                    {
+                        caption: `${product.name}
 
  ${await translateText('Price', lang)}: ${product.price}$ / ${await translateText('card', lang)}`,
+                        parse_mode: 'Markdown',
+                        reply_markup: Markup.inlineKeyboard([
+                            [backButton, Markup.button.callback(await translateText('Buy', lang), `checkout_${product._id}`)]
+                        ]).reply_markup
+                    }
+                );
+            } catch (error) {
+                console.error('Error sending photo:', error);
+                await ctx.reply(`${product.name}
+
+ ${await translateText('Price', lang)}: ${product.price}$ / ${await translateText('card', lang)}`, {
                     parse_mode: 'Markdown',
                     reply_markup: Markup.inlineKeyboard([
                         [backButton, Markup.button.callback(await translateText('Buy', lang), `checkout_${product._id}`)]
                     ]).reply_markup
-                }
-            );
-        } catch (error) {
-            console.error('Error sending photo:', error);
+                });
+            }
+        } else {
             await ctx.reply(`${product.name}
 
  ${await translateText('Price', lang)}: ${product.price}$ / ${await translateText('card', lang)}`, {
