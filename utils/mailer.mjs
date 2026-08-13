@@ -3,6 +3,31 @@ import dotenv from 'dotenv';
 import translateText from './translator.mjs';
 dotenv.config();
 
+const RESEND_API_KEY = process.env.RESEND_API_KEY;
+const RESEND_FROM = process.env.RESEND_FROM || 'ShopBot <onboarding@resend.dev>';
+
+// HTTPS email API (works even where outbound SMTP ports are blocked, e.g. free Render)
+const sendViaApi = async ({ to, subject, text }) => {
+  const res = await fetch('https://api.resend.com/emails', {
+    method: 'POST',
+    headers: {
+      Authorization: `Bearer ${RESEND_API_KEY}`,
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify({ from: RESEND_FROM, to: [to], subject, text }),
+    signal: AbortSignal.timeout(15000),
+  });
+
+  if (!res.ok) {
+    const body = await res.text();
+    throw new Error(`Resend API ${res.status}: ${body}`);
+  }
+
+  const data = await res.json();
+  return { messageId: data.id };
+};
+
+// Fallback: classic SMTP (works for local dev, Gmail, or any SMTP provider)
 const transporter = nodemailer.createTransport({
   host: process.env.SMTP_HOST || 'smtp.gmail.com',
   port: Number(process.env.SMTP_PORT) || 587,
@@ -16,24 +41,17 @@ const transporter = nodemailer.createTransport({
   socketTimeout: 20000,
 });
 
-// Cold starts on free hosts can have brief outbound network gaps;
-// retry the startup check a few times before giving up
-for (let attempt = 1; attempt <= 3; attempt++) {
-  try {
-    await transporter.verify();
-    console.log(`✅ Mail server is ready (${transporter.options.host})`);
-    break;
-  } catch (err) {
-    console.warn(`⚠️ Mail check attempt ${attempt}/3 failed (${transporter.options.host}): ${err.message}`);
-    if (attempt === 3) {
-      console.warn('⚠️ Mail server not reachable at startup, emails will retry on send');
-    } else {
-      await new Promise((r) => setTimeout(r, 5000));
-    }
-  }
-}
-
 const MAIL_FROM = process.env.SMTP_FROM || '"Lateefz" <lateefokanlawon52@gmail.com>';
+
+const sendMail = async (to, subject, text) => {
+  if (RESEND_API_KEY) {
+    const info = await sendViaApi({ to, subject, text });
+    console.log('📤 Email sent via Resend API: %s', info.messageId);
+    return;
+  }
+  const info = await transporter.sendMail({ from: MAIL_FROM, to, subject, text });
+  console.log('📤 Email sent via SMTP: %s', info.messageId);
+};
 
 const sendVerificationMail = async (to, code, type = 'signup', lang = 'EN') => {
   const subject =
@@ -47,17 +65,9 @@ const sendVerificationMail = async (to, code, type = 'signup', lang = 'EN') => {
       : await translateText(`🔑 Here is your password reset code: ${code}`, lang);
 
   try {
-    const info = await transporter.sendMail({
-      from: MAIL_FROM,
-      to,
-      subject,
-      text: message,
-    });
-
-    console.log('📤 Message sent: %s', info.messageId);
-    console.log('🔎 Preview URL: %s', nodemailer.getTestMessageUrl(info));
+    await sendMail(to, subject, message);
   } catch (err) {
-    console.error('❌ Error while sending mail', err);
+    console.error('❌ Error while sending mail', err?.message || err);
   }
 };
 
@@ -74,15 +84,8 @@ export const sendGiftCardEmail = async (to, giftCardCodes, orderId) => {
   message += `\nThank you for shopping with us!`;
 
   try {
-    const info = await transporter.sendMail({
-      from: MAIL_FROM,
-      to,
-      subject,
-      text: message,
-    });
-
-    console.log('📤 Gift card email sent: %s', info.messageId);
+    await sendMail(to, subject, message);
   } catch (err) {
-    console.error('❌ Error sending gift card email', err);
+    console.error('❌ Error sending gift card email', err?.message || err);
   }
 };
