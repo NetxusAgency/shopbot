@@ -23,6 +23,8 @@ try {
   console.warn("⚠️ Mail server not reachable at startup, emails will retry on send:", err.message);
 }
 
+const MAIL_FROM = process.env.SMTP_FROM || '"Lateefz" <lateefokanlawon52@gmail.com>';
+
 const sendVerificationMail = async (to, code, type = 'signup', lang = 'EN') => {
   const subject =
     type === 'signup'
@@ -36,7 +38,7 @@ const sendVerificationMail = async (to, code, type = 'signup', lang = 'EN') => {
 
   try {
     const info = await transporter.sendMail({
-      from: '"Lateefz" <lateefokanlawon52@gmail.com>',
+      from: MAIL_FROM,
       to,
       subject,
       text: message,
@@ -63,7 +65,7 @@ export const sendGiftCardEmail = async (to, giftCardCodes, orderId) => {
 
   try {
     const info = await transporter.sendMail({
-      from: '"ShopBot" <lateefokanlawon52@gmail.com>',
+      from: MAIL_FROM,
       to,
       subject,
       text: message,
