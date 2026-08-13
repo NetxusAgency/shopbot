@@ -18,9 +18,9 @@ const transporter = nodemailer.createTransport({
 
 try {
   await transporter.verify();
-  console.log("✅ Mail server is ready");
+  console.log(`✅ Mail server is ready (${transporter.options.host})`);
 } catch (err) {
-  console.warn("⚠️ Mail server not reachable at startup, emails will retry on send:", err.message);
+  console.warn(`⚠️ Mail server not reachable at startup (${transporter.options.host}), emails will retry on send:`, err.message);
 }
 
 const MAIL_FROM = process.env.SMTP_FROM || '"Lateefz" <lateefokanlawon52@gmail.com>';
