@@ -11,16 +11,26 @@ const transporter = nodemailer.createTransport({
     user: process.env.SMTP_USER || 'lateefokanlawon52@gmail.com',
     pass: process.env.SMTP_PASS || process.env.GOOGLE_APP_PASSWORD,
   },
-  connectionTimeout: 10000,
-  greetingTimeout: 10000,
-  socketTimeout: 10000,
+  connectionTimeout: 20000,
+  greetingTimeout: 20000,
+  socketTimeout: 20000,
 });
 
-try {
-  await transporter.verify();
-  console.log(`✅ Mail server is ready (${transporter.options.host})`);
-} catch (err) {
-  console.warn(`⚠️ Mail server not reachable at startup (${transporter.options.host}), emails will retry on send:`, err.message);
+// Cold starts on free hosts can have brief outbound network gaps;
+// retry the startup check a few times before giving up
+for (let attempt = 1; attempt <= 3; attempt++) {
+  try {
+    await transporter.verify();
+    console.log(`✅ Mail server is ready (${transporter.options.host})`);
+    break;
+  } catch (err) {
+    console.warn(`⚠️ Mail check attempt ${attempt}/3 failed (${transporter.options.host}): ${err.message}`);
+    if (attempt === 3) {
+      console.warn('⚠️ Mail server not reachable at startup, emails will retry on send');
+    } else {
+      await new Promise((r) => setTimeout(r, 5000));
+    }
+  }
 }
 
 const MAIL_FROM = process.env.SMTP_FROM || '"Lateefz" <lateefokanlawon52@gmail.com>';
