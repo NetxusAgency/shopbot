@@ -4,10 +4,12 @@ import translateText from './translator.mjs';
 dotenv.config();
 
 const transporter = nodemailer.createTransport({
-  service: "gmail",
+  host: process.env.SMTP_HOST || 'smtp.gmail.com',
+  port: Number(process.env.SMTP_PORT) || 587,
+  secure: process.env.SMTP_SECURE === 'true',
   auth: {
-    user: "lateefokanlawon52@gmail.com",
-    pass: process.env.GOOGLE_APP_PASSWORD,
+    user: process.env.SMTP_USER || 'lateefokanlawon52@gmail.com',
+    pass: process.env.SMTP_PASS || process.env.GOOGLE_APP_PASSWORD,
   },
   connectionTimeout: 10000,
   greetingTimeout: 10000,
