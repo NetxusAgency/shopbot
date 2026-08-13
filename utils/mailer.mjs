@@ -9,10 +9,17 @@ const transporter = nodemailer.createTransport({
     user: "lateefokanlawon52@gmail.com",
     pass: process.env.GOOGLE_APP_PASSWORD,
   },
+  connectionTimeout: 10000,
+  greetingTimeout: 10000,
+  socketTimeout: 10000,
 });
 
-await transporter.verify();
-console.log("✅ Mail server is ready");
+try {
+  await transporter.verify();
+  console.log("✅ Mail server is ready");
+} catch (err) {
+  console.warn("⚠️ Mail server not reachable at startup, emails will retry on send:", err.message);
+}
 
 const sendVerificationMail = async (to, code, type = 'signup', lang = 'EN') => {
   const subject =
