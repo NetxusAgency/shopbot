@@ -23,6 +23,11 @@ connectDB();
 
 const bot = new Telegraf(process.env.BOT_TOKEN)
 
+// Catch middleware errors so a stale/expired update can never crash the bot
+bot.catch((err, ctx) => {
+  console.error('⚠️ Bot middleware error:', err?.description || err?.message || err);
+});
+
 
 
 const stage = new Scenes.Stage([signupScene,loginScene,forgotPasswordScene, checkoutWizard]);
@@ -62,7 +67,7 @@ bot.on('callback_query', async (ctx, next) => {
   const query = ctx.callbackQuery?.data;
 
   if (!ctx.session.user && query && !allowedActions.some(action => query.startsWith(action))) {
-    await ctx.answerCbQuery();
+    await ctx.answerCbQuery().catch(() => {});
     return ctx.reply(await translateText('⚠️ You must be logged in to access this feature.', lang));
   }
   return next();
@@ -221,3 +226,11 @@ bot.launch()
 // Enable graceful stop
 process.once('SIGINT', () => bot.stop('SIGINT'))
 process.once('SIGTERM', () => bot.stop('SIGTERM'))
+
+// Last-resort safety net: log instead of crashing on unexpected async errors
+process.on('unhandledRejection', (reason) => {
+  console.error('⚠️ Unhandled promise rejection:', reason?.description || reason?.message || reason);
+});
+process.on('uncaughtException', (err) => {
+  console.error('⚠️ Uncaught exception:', err?.message || err);
+});
