@@ -5,9 +5,37 @@ dotenv.config();
 
 const RESEND_API_KEY = process.env.RESEND_API_KEY;
 const RESEND_FROM = process.env.RESEND_FROM || 'ShopBot <onboarding@resend.dev>';
+const BREVO_API_KEY = process.env.BREVO_API_KEY;
+const BREVO_SENDER = process.env.BREVO_SENDER || { email: 'lateefokanlawon52@gmail.com', name: 'ShopBot' };
 
-// HTTPS email API (works even where outbound SMTP ports are blocked, e.g. free Render)
+// HTTPS email APIs (work even where outbound SMTP ports are blocked, e.g. free Render)
 const sendViaApi = async ({ to, subject, text }) => {
+  if (BREVO_API_KEY) {
+    const res = await fetch('https://api.brevo.com/v3/smtp/email', {
+      method: 'POST',
+      headers: {
+        'api-key': BREVO_API_KEY,
+        'Content-Type': 'application/json',
+        Accept: 'application/json',
+      },
+      body: JSON.stringify({
+        sender: BREVO_SENDER,
+        to: [{ email: to }],
+        subject,
+        textContent: text,
+      }),
+      signal: AbortSignal.timeout(15000),
+    });
+
+    if (!res.ok) {
+      const body = await res.text();
+      throw new Error(`Brevo API ${res.status}: ${body}`);
+    }
+
+    const data = await res.json();
+    return { messageId: data.messageId };
+  }
+
   const res = await fetch('https://api.resend.com/emails', {
     method: 'POST',
     headers: {
@@ -44,9 +72,9 @@ const transporter = nodemailer.createTransport({
 const MAIL_FROM = process.env.SMTP_FROM || '"Lateefz" <lateefokanlawon52@gmail.com>';
 
 const sendMail = async (to, subject, text) => {
-  if (RESEND_API_KEY) {
+  if (BREVO_API_KEY || RESEND_API_KEY) {
     const info = await sendViaApi({ to, subject, text });
-    console.log('📤 Email sent via Resend API: %s', info.messageId);
+    console.log(`📤 Email sent via ${BREVO_API_KEY ? 'Brevo' : 'Resend'} API: %s`, info.messageId);
     return;
   }
   const info = await transporter.sendMail({ from: MAIL_FROM, to, subject, text });
